@@ -14,6 +14,27 @@ typedef struct	s_ast
 	struct s_ast	*next;
 }				t_ast;
 
+void	free_ast(t_ast *ast)
+{
+	t_ast	*tmp;
+	int		i;
+
+	if (!ast)
+		return ;
+	while (ast)
+	{
+		tmp = ast->next;
+		i = 0;
+		while (ast->arg[i])
+		{
+			free(ast->arg[i]);
+			i++;
+		}
+		free(ast);
+		ast = tmp;
+	}
+}
+
 void	free_fds(int **fds)
 {
 	int		i;
@@ -108,27 +129,6 @@ void	ft_astadd_back(t_ast **astk, t_ast *new)
 		*astk = new;
 }
 
-void	free_ast(t_ast *ast)
-{
-	t_ast	*tmp;
-	int		i;
-
-	if (!ast)
-		return ;
-	while (ast)
-	{
-		tmp = ast->next;
-		i = 0;
-		while (ast->arg[i])
-		{
-			free(ast->arg[i]);
-			i++;
-		}
-		free(ast);
-		ast = tmp;
-	}
-}
-
 void	ft_error(char *msg, t_ast *ast)
 {
 	write(2, msg, ft_strlen(msg));
@@ -168,6 +168,7 @@ t_ast	*build_one_node(int *n_arg, int ac, char **av)
 		i++;
 		*n_arg += 1;
 	}
+	printf("i : %d\n", i);
 	ast->arg[i] = 0;
 	ast->next = NULL;
 	*n_arg += 1;
@@ -229,6 +230,7 @@ void	close_for_zero(int **fds)
 	{
 		close(fds[i][0]);
 		close(fds[i][1]);
+		i++;
 	}
 }
 
@@ -261,20 +263,13 @@ void	manage_fd(int **fds, int i)
 			dup2(fds[i][1], STDOUT_FILENO);
 		close(fds[i][1]);
 	}
-	else if (i < n_pid - 1)
-	{
-		close_for_n(fds, i);
-		dup2(fds[i][0], STDIN_FILENO);
-		dup2(fds[i][1], STDOUT_FILENO);
-		close(fds[i][0]);
-		close(fds[i][1]);
-	}
 	else
 	{
 		close_for_n(fds, i);
-		close(fds[i][1]);
-		dup2(fds[i][0], STDIN_FILENO);
-		close(fds[i][0]);
+		dup2(fds[i - 1][0], STDIN_FILENO);
+		if (i != n_pid - 1)
+			dup2(fds[i][1], STDOUT_FILENO);
+		close(fds[i - 1][0]);
 	}
 }
 
@@ -324,10 +319,9 @@ void	ft_microshell(t_ast *ast, pid_t *child_pid, int **fds, char **envp)
 	int		i;
 
 	next = ast;
-	i = -1;
-	while (next)
+	i = 0;
+	while (i < n_pid)
 	{
-		i++;
 		child_pid[i] = fork();
 		if (child_pid[i] == -1)
 		{
@@ -337,11 +331,11 @@ void	ft_microshell(t_ast *ast, pid_t *child_pid, int **fds, char **envp)
 		}
 		else if (child_pid[i] == 0)
 			ft_child(next, fds, envp, i);
-		else
-			close_fds_in_parent(fds, i, 1);
+		close_fds_in_parent(fds, i, 1);
 		next = ast->next;
+		i++;
 	}
-	close_fds_in_parent(fds, i, 0);
+	close_fds_in_parent(fds, n_pid - 1, 0);
 	wait_pid(child_pid);
 }
 
@@ -354,7 +348,7 @@ int	main(int ac, char **av, char **envp)
 	ast = build_ast(ac, av);
 	if (!n_pid)
 		return (0);
-//	print_ast(ast);
+	print_ast(ast);
 	child_pid = malloc(sizeof(pid_t) * n_pid);
 	if (!child_pid)
 			ft_error("error: fatal\n", ast);
