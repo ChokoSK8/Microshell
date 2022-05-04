@@ -14,6 +14,11 @@ typedef struct	s_ast
 	struct s_ast	*next;
 }				t_ast;
 
+void	ft_putstr_fd(char *str, int fd)
+{
+	write(fd, str, strlen(str));
+}
+
 void	free_ast(t_ast *ast)
 {
 	t_ast	*tmp;
@@ -280,6 +285,9 @@ void	ft_child(t_ast *ast, int **fds, char **envp, int i)
 		ft_cd(ast, fds);
 	else if (execve(ast->arg[0], ast->arg, envp) < 0)
 		g_status = 1;
+	close(fds[i][1]);
+	close(1);
+	close(0);
 	exit(g_status);
 }
 
@@ -288,7 +296,7 @@ void	wait_pid(pid_t *child_pid)
 	int		i;
 
 	i = 0;
-	while (i < n_pid - 1)
+	while (i < n_pid)
 	{
 		waitpid(child_pid[i], &g_status, 0);
 		if (WIFEXITED(g_status))
@@ -301,8 +309,8 @@ void	close_fds_in_parent(int **fds, int i, int config)
 {
 	if (config == 1)
 	{
-		if (i > 2)
-			close(fds[i - 2][0]);
+		if (i > 0)
+			close(fds[i - 1][0]);
 		close(fds[i][1]);
 	}
 	else
@@ -320,6 +328,7 @@ void	ft_microshell(t_ast *ast, pid_t *child_pid, int **fds, char **envp)
 
 	next = ast;
 	i = 0;
+	printf("n_pid : %d\n", n_pid);
 	while (i < n_pid)
 	{
 		child_pid[i] = fork();
