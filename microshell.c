@@ -40,7 +40,7 @@ void	print_ast(t_ast *ast)
 	next = ast;
 	while (next)
 	{
-		printf("node : \n");
+		printf("node : \ntype : %c\n", ast->type);
 		print_matc(next->arg);
 		ast = next;
 		next = ast->next;
@@ -145,6 +145,7 @@ void	ft_astadd_back(t_ast **astk, t_ast *new)
 		new->prev = NULL;
 	}
 }
+
 void	ft_error_stay(char *msg, char *arg, t_ast *ast)
 {
 	write(2, msg, ft_strlen(msg));
@@ -153,7 +154,6 @@ void	ft_error_stay(char *msg, char *arg, t_ast *ast)
 	write(2, "\n", 1);
 	free_ast(ast);
 }
-
 
 void	ft_error(char *msg, char *arg, t_ast *ast)
 {
@@ -201,8 +201,10 @@ t_ast	*build_one_node(int *n_arg, int ac, char **av)
 	}
 	if (*n_arg < ac && !strcmp(av[*n_arg], "|")) 
 		ast->type = 'c';
-	else
+	else if (*n_arg < ac)
 		ast->type = 'e';
+	else
+		ast->type = 'd';
 	ast->arg[i] = 0;
 	ast->next = NULL;
 	*n_arg += 1;
@@ -305,7 +307,7 @@ void	manage_fd(int **fds, int i, t_ast  *ast)
 	if (i == 0)
 	{
 		close_for_zero(fds);
-		if (n_pid > 1)
+		if (n_pid > 1 && ast->type != 'e')
 			dup2(fds[i][1], STDOUT_FILENO);
 	}
 	else
@@ -412,7 +414,6 @@ int	main(int ac, char **av, char **envp)
 	int		**fds;
 
 	ast = build_ast(ac, av);
-	print_ast(ast);
 	if (!n_pid)
 		return (0);
 	child_pid = malloc(sizeof(pid_t) * n_pid);
