@@ -40,7 +40,7 @@ void	print_ast(t_ast *ast)
 	next = ast;
 	while (next)
 	{
-		printf("node : \ntype : %c\n", ast->type);
+		printf("node : \ntype : %c\n", next->type);
 		print_matc(next->arg);
 		ast = next;
 		next = ast->next;
@@ -146,13 +146,12 @@ void	ft_astadd_back(t_ast **astk, t_ast *new)
 	}
 }
 
-void	ft_error_stay(char *msg, char *arg, t_ast *ast)
+void	ft_error_stay(char *msg, char *arg)
 {
 	write(2, msg, ft_strlen(msg));
 	if (arg)
-		write(2, msg, ft_strlen(arg));
+		write(2, arg, ft_strlen(arg));
 	write(2, "\n", 1);
-	free_ast(ast);
 }
 
 void	ft_error(char *msg, char *arg, t_ast *ast)
@@ -199,12 +198,10 @@ t_ast	*build_one_node(int *n_arg, int ac, char **av)
 		i++;
 		*n_arg += 1;
 	}
-	if (*n_arg < ac && !strcmp(av[*n_arg], "|")) 
-		ast->type = 'c';
-	else if (*n_arg < ac)
-		ast->type = 'e';
+	if (*n_arg < ac)
+		ast->type = *av[*n_arg];
 	else
-		ast->type = 'd';
+		ast->type = 'e';
 	ast->arg[i] = 0;
 	ast->next = NULL;
 	*n_arg += 1;
@@ -263,9 +260,9 @@ int	ft_arglen(char **arg)
 void	ft_cd(t_ast *ast)
 {
 	if (ft_arglen(ast->arg) > 2)
-		ft_error_stay("error: cd: bad arguments", NULL, ast);
+		ft_error_stay("error: cd: bad arguments", NULL);
 	else if (chdir(ast->arg[1]) == -1)
-		ft_error_stay("error: cd: cannot change directory\n", ast->arg[1], ast);
+		ft_error_stay("error: cd: cannot change directory ", ast->arg[1]);
 }
 
 void	close_for_zero(int **fds)
@@ -307,7 +304,7 @@ void	manage_fd(int **fds, int i, t_ast  *ast)
 	if (i == 0)
 	{
 		close_for_zero(fds);
-		if (n_pid > 1 && ast->type != 'e')
+		if (n_pid > 1 && ast->type == 'c')
 			dup2(fds[i][1], STDOUT_FILENO);
 	}
 	else
@@ -316,7 +313,7 @@ void	manage_fd(int **fds, int i, t_ast  *ast)
 		if (ast->prev->type != 'e')
 			dup2(fds[i - 1][0], STDIN_FILENO);
 		close(fds[i - 1][0]);
-		if (ast->type != 'e')
+		if (ast->type == 'c')
 			dup2(fds[i][1], STDOUT_FILENO);
 	}
 }
@@ -384,8 +381,7 @@ void	ft_microshell(t_ast *ast, pid_t *child_pid, int **fds, char **envp)
 	i = -1;
 	while (++i < n_pid)
 	{
-		if ((!next->prev || next->prev->type == 'e')
-				&& (!next->next || next->next->type == 'e')
+		if ((!next->prev || next->prev->type == ';')
 				&& !strcmp(next->arg[0], "cd"))
 			child_pid[i] = 42;
 		else
@@ -399,9 +395,10 @@ void	ft_microshell(t_ast *ast, pid_t *child_pid, int **fds, char **envp)
 		else if (child_pid[i] == 0 || child_pid[i] == 42)
 			ft_child(next, fds, envp, i, child_pid);
 		close_fds_in_parent(fds, i, 1);
-		if (next->type == 'e')
-			wait_pid(child_pid, i);
+		if (next->type == ';')
+			wait_pid(child_pid, i - 1);
 		next = next->next;
+		printf("i : %d\n", i);
 	}
 	close_fds_in_parent(fds, n_pid - 1, 0);
 	wait_pid(child_pid, n_pid - 1);
@@ -414,6 +411,7 @@ int	main(int ac, char **av, char **envp)
 	int		**fds;
 
 	ast = build_ast(ac, av);
+//	print_ast(ast);
 	if (!n_pid)
 		return (0);
 	child_pid = malloc(sizeof(pid_t) * n_pid);
