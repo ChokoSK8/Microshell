@@ -145,10 +145,22 @@ void	ft_astadd_back(t_ast **astk, t_ast *new)
 		new->prev = NULL;
 	}
 }
-
-void	ft_error(char *msg, t_ast *ast)
+void	ft_error_stay(char *msg, char *arg, t_ast *ast)
 {
 	write(2, msg, ft_strlen(msg));
+	if (arg)
+		write(2, msg, ft_strlen(arg));
+	write(2, "\n", 1);
+	free_ast(ast);
+}
+
+
+void	ft_error(char *msg, char *arg, t_ast *ast)
+{
+	write(2, msg, ft_strlen(msg));
+	if (arg)
+		write(2, msg, ft_strlen(arg));
+	write(2, "\n", 1);
 	free_ast(ast);
 	exit(1);
 }
@@ -173,17 +185,17 @@ t_ast	*build_one_node(int *n_arg, int ac, char **av)
 		return (0);
 	ast = malloc(sizeof(t_ast));
 	if (!ast)
-		ft_error("error: fatal\n", ast);
+		ft_error("error: fatal", NULL, ast);
 	i = 0;
 	ast->arg = malloc(sizeof(char *) * (get_n_args(*n_arg, ac, av) + 1));
 	if (!ast->arg)
-		ft_error("error: fatal\n", ast);
+		ft_error("error: fatal", NULL, ast);
 	while (*n_arg < ac && strcmp(av[*n_arg], ";")
 			&& strcmp(av[*n_arg], "|"))
 	{
 		ast->arg[i] = ft_strdup(av[*n_arg]);
 		if (!ast->arg[i])
-			ft_error("error: fatal\n", ast);
+			ft_error("error: fatal", NULL, ast);
 		i++;
 		*n_arg += 1;
 	}
@@ -246,10 +258,12 @@ int	ft_arglen(char **arg)
 	return (i);
 }
 
-void	ft_cd(t_ast *ast, int **fds)
+void	ft_cd(t_ast *ast)
 {
 	if (ft_arglen(ast->arg) > 2)
-		ft_error();
+		ft_error_stay("error: cd: bad arguments", NULL, ast);
+	else if (chdir(ast->arg[1]) == -1)
+		ft_error_stay("error: cd: cannot change directory\n", ast->arg[1], ast);
 }
 
 void	close_for_zero(int **fds)
@@ -309,18 +323,24 @@ void	ft_child(t_ast *ast, int **fds, char **envp, int i, pid_t *child_pid)
 {
 	manage_fd(fds, i, ast);
 	if (!strcmp(ast->arg[0], "cd"))
-		ft_cd(ast, fds);
-	execve(ast->arg[0], ast->arg, envp);
-	write(2, "error: cannot execute ", 22);
-	write(2, ast->arg[0], strlen(ast->arg[0]));
-	write(2, "\n", 1);
+		ft_cd(ast);
+	else
+	{
+		execve(ast->arg[0], ast->arg, envp);
+		write(2, "error: cannot execute ", 22);
+		write(2, ast->arg[0], strlen(ast->arg[0]));
+		write(2, "\n", 1);
+	}
 	close(fds[i][1]);
-	free_ast(ast);
-	free(child_pid);
-	free_fds(fds);
-	close(1);
-	close(0);
-	exit(g_status);
+	if (child_pid[i] != 42)
+	{
+		close(1);
+		close(0);
+		free_ast(ast);
+		free(child_pid);
+		free_fds(fds);
+		exit(g_status);
+	}
 }
 
 void	wait_pid(pid_t *child_pid, int i)
@@ -356,20 +376,25 @@ void	close_fds_in_parent(int **fds, int i, int config)
 void	ft_microshell(t_ast *ast, pid_t *child_pid, int **fds, char **envp)
 {
 	t_ast	*next;
-	int		i;
+	int	i;
 
 	next = ast;
 	i = -1;
 	while (++i < n_pid)
 	{
-		child_pid[i] = fork();
+		if ((!next->prev || next->prev->type == 'e')
+				&& (!next->next || next->next->type == 'e')
+				&& !strcmp(next->arg[0], "cd"))
+			child_pid[i] = 42;
+		else
+			child_pid[i] = fork();
 		if (child_pid[i] == -1)
 		{
 			free(child_pid);
 			free(fds);
-			ft_error("error: fatal\n", ast);
+			ft_error("error: fatal", NULL, ast);
 		}
-		else if (child_pid[i] == 0)
+		else if (child_pid[i] == 0 || child_pid[i] == 42)
 			ft_child(next, fds, envp, i, child_pid);
 		close_fds_in_parent(fds, i, 1);
 		if (next->type == 'e')
@@ -387,16 +412,17 @@ int	main(int ac, char **av, char **envp)
 	int		**fds;
 
 	ast = build_ast(ac, av);
+	print_ast(ast);
 	if (!n_pid)
 		return (0);
 	child_pid = malloc(sizeof(pid_t) * n_pid);
 	if (!child_pid)
-			ft_error("error: fatal\n", ast);
+			ft_error("error: fatal", NULL, ast);
 	fds = init_fds(n_pid);
 	if (!fds)
 	{
 			free(child_pid);
-			ft_error("error: fatal\n", ast);
+			ft_error("error: fatal", NULL, ast);
 	}
 	ft_microshell(ast, child_pid, fds, envp);
 	free_ast(ast);
